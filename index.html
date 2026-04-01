@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChargePath — CNG & EV Station Finder</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1a9e6e;
+    --green-light: #e0f5ed;
+    --green-dark: #0d6b4a;
+    --blue: #1565c0;
+    --blue-light: #e3eeff;
+    --amber: #e08c00;
+    --amber-light: #fff4d6;
+    --red: #c62828;
+    --red-light: #fdeaea;
+    --bg: #f5f7f6;
+    --card: #ffffff;
+    --border: #dde3e0;
+    --text: #111d17;
+    --muted: #6b7c74;
+    --sidebar-w: 380px;
+    --header-h: 64px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── AUTH SCREENS ── */
+  .auth-overlay {
+    position: fixed; inset: 0; background: linear-gradient(135deg, #0d2818 0%, #0a1f30 50%, #1a0d28 100%);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+    transition: opacity 0.4s;
+  }
+  .auth-overlay.hidden { opacity: 0; pointer-events: none; }
+  .auth-box {
+    background: rgba(255,255,255,0.06); backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 20px;
+    padding: 40px; width: 420px; max-width: 95vw;
+  }
+  .auth-logo { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .auth-logo span { color: #4ade80; }
+  .auth-sub { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 30px; }
+  .auth-tabs { display: flex; gap: 8px; margin-bottom: 28px; }
+  .auth-tab { flex: 1; padding: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: rgba(255,255,255,0.5); font-family: 'DM Sans', sans-serif; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+  .auth-tab.active { background: #1a9e6e; border-color: #1a9e6e; color: #fff; font-weight: 500; }
+  .auth-form { display: none; flex-direction: column; gap: 14px; }
+  .auth-form.active { display: flex; }
+  .auth-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .auth-field { display: flex; flex-direction: column; gap: 5px; }
+  .auth-field label { font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.6px; }
+  .auth-field input, .auth-field select {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 10px 14px; color: #fff; font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .auth-field input:focus, .auth-field select:focus { border-color: #4ade80; }
+  .auth-field input::placeholder { color: rgba(255,255,255,0.25); }
+  .auth-field select option { background: #1a2e20; }
+  .auth-btn {
+    background: #1a9e6e; border: none; border-radius: 10px; padding: 13px;
+    color: #fff; font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: background 0.2s; margin-top: 4px;
+  }
+  .auth-btn:hover { background: #15875e; }
+  .auth-admin-link { text-align: center; margin-top: 16px; }
+  .auth-admin-link a { color: rgba(255,255,255,0.4); font-size: 12px; text-decoration: none; }
+  .auth-admin-link a:hover { color: #4ade80; }
+  .auth-error { background: rgba(198,40,40,0.2); border: 1px solid rgba(198,40,40,0.4); border-radius: 8px; padding: 10px 14px; color: #ff8a80; font-size: 13px; display: none; }
+
+  /* ── ADMIN OVERLAY ── */
+  .admin-overlay {
+    position: fixed; inset: 0; background: linear-gradient(135deg, #0a1628 0%, #1a0a2e 100%);
+    display: flex; align-items: center; justify-content: center; z-index: 9998;
+    transition: opacity 0.4s;
+  }
+  .admin-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  /* ── MAIN APP ── */
+  .app { display: none; height: 100vh; flex-direction: column; }
+  .app.visible { display: flex; }
+
+  /* HEADER */
+  .header {
+    height: var(--header-h); background: #fff; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 16px; z-index: 100; flex-shrink: 0;
+  }
+  .logo { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: var(--text); }
+  .logo span { color: var(--green); }
+  .header-search {
+    flex: 1; max-width: 360px; display: flex; align-items: center;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0 14px; gap: 8px;
+  }
+  .header-search input { background: none; border: none; outline: none; font-family: 'DM Sans', sans-serif; font-size: 14px; width: 100%; padding: 8px 0; color: var(--text); }
+  .header-filters { display: flex; gap: 8px; }
+  .filter-btn {
+    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: #fff;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; font-weight: 500;
+    transition: all 0.2s; color: var(--muted);
+  }
+  .filter-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
+  .filter-btn.cng.active { background: var(--amber); border-color: var(--amber); }
+  .filter-btn.ev.active { background: var(--blue); border-color: var(--blue); }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .user-badge {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--green-light); border: 1px solid #a7e3cb; border-radius: 10px; padding: 6px 12px;
+  }
+  .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 600; }
+  .user-name { font-size: 13px; font-weight: 500; color: var(--green-dark); }
+  .logout-btn { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; color: var(--muted); }
+
+  /* BODY */
+  .body { display: flex; flex: 1; overflow: hidden; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: var(--sidebar-w); background: #fff; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+  }
+  .sidebar-header { padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+  .sidebar-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--muted); letter-spacing: 0.4px; text-transform: uppercase; }
+  .sidebar-count { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .station-list { overflow-y: auto; flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .station-card {
+    background: var(--bg); border: 1.5px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; cursor: pointer; transition: all 0.2s;
+  }
+  .station-card:hover, .station-card.selected { background: #fff; border-color: var(--green); box-shadow: 0 2px 12px rgba(26,158,110,0.12); }
+  .sc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .sc-name { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.3; }
+  .sc-badges { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+  .badge {
+    font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.4px;
+  }
+  .badge-cng { background: var(--amber-light); color: #7a4f00; }
+  .badge-ev { background: var(--blue-light); color: #0d47a1; }
+  .badge-open { background: var(--green-light); color: #0d6b4a; }
+  .badge-closed { background: var(--red-light); color: var(--red); }
+  .sc-meta { display: flex; align-items: center; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .traffic-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .traffic-low { background: #22c55e; }
+  .traffic-medium { background: #f59e0b; }
+  .traffic-high { background: #ef4444; }
+  .sc-dist { font-size: 12px; color: var(--muted); }
+  .sc-price { font-size: 13px; font-weight: 600; color: var(--green-dark); margin-top: 6px; }
+
+  /* MAP */
+  .map-area { flex: 1; position: relative; overflow: hidden; }
+  #map-iframe { width: 100%; height: 100%; border: none; }
+  .map-pins { position: absolute; inset: 0; pointer-events: none; }
+
+  /* DETAIL PANEL */
+  .detail-panel {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 400px;
+    background: #fff; border-left: 1px solid var(--border);
+    transform: translateX(100%); transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+    display: flex; flex-direction: column; overflow-y: auto; z-index: 50;
+  }
+  .detail-panel.open { transform: translateX(0); }
+  .dp-close {
+    position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--border);
+    padding: 14px 18px; display: flex; align-items: center; gap: 10px; z-index: 2;
+  }
+  .dp-close button { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; }
+  .dp-hero { padding: 20px 20px 14px; }
+  .dp-type-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; display: flex; gap: 6px; }
+  .dp-name { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; line-height: 1.2; margin-bottom: 6px; }
+  .dp-address { font-size: 13px; color: var(--muted); }
+  .dp-section { padding: 0 20px 16px; }
+  .dp-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 10px; }
+  .dp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .dp-stat { background: var(--bg); border-radius: 12px; padding: 14px; }
+  .dp-stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .dp-stat-val { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; }
+  .dp-stat-val.green { color: var(--green-dark); }
+  .dp-stat-val.amber { color: var(--amber); }
+  .dp-stat-val.blue { color: var(--blue); }
+  .dp-ports { display: flex; flex-direction: column; gap: 8px; }
+  .dp-port { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border-radius: 10px; padding: 10px 14px; }
+  .dp-port-name { font-size: 13px; font-weight: 500; }
+  .dp-port-avail { font-size: 12px; color: var(--muted); }
+  .dp-traffic { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 12px; padding: 14px; }
+  .dp-traffic-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .dp-traffic-fill { height: 100%; border-radius: 4px; }
+  .dp-traffic-label { font-size: 13px; font-weight: 600; min-width: 50px; text-align: right; }
+  .dp-actions { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .action-btn {
+    padding: 13px; border-radius: 12px; border: none; font-family: 'Syne', sans-serif;
+    font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; text-align: center;
+  }
+  .action-btn.call { background: var(--green); color: #fff; }
+  .action-btn.call:hover { background: var(--green-dark); }
+  .action-btn.directions { background: var(--blue-light); color: var(--blue); border: 1px solid #bbd0f5; }
+  .action-btn.directions:hover { background: #d0e2fb; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 0 20px 16px; }
+
+  /* ── ADMIN DASHBOARD ── */
+  .admin-app { display: none; height: 100vh; flex-direction: column; }
+  .admin-app.visible { display: flex; }
+  .admin-header {
+    height: var(--header-h); background: #0d1e13; display: flex; align-items: center;
+    padding: 0 24px; gap: 16px; flex-shrink: 0;
+  }
+  .admin-logo { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; color: #fff; }
+  .admin-logo span { color: #4ade80; }
+  .admin-badge { background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.3); border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700; color: #4ade80; text-transform: uppercase; letter-spacing: 0.5px; }
+  .admin-nav { display: flex; gap: 4px; margin-left: 30px; }
+  .admin-nav-btn {
+    padding: 7px 16px; border-radius: 8px; border: none; background: transparent;
+    color: rgba(255,255,255,0.5); font-family: 'DM Sans', sans-serif; font-size: 14px; cursor: pointer; transition: all 0.2s;
+  }
+  .admin-nav-btn.active { background: rgba(255,255,255,0.1); color: #fff; }
+  .admin-logout { margin-left: auto; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 7px 14px; color: rgba(255,255,255,0.6); font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; }
+  .admin-body { flex: 1; overflow-y: auto; padding: 28px; background: #f0f4f1; }
+  .admin-section { display: none; }
+  .admin-section.active { display: block; }
+  .admin-section-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; margin-bottom: 20px; }
+  .admin-table-wrap { background: #fff; border-radius: 16px; border: 1px solid var(--border); overflow: hidden; }
+  .admin-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .admin-table th { padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--bg); }
+  .admin-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .admin-table tr:last-child td { border-bottom: none; }
+  .edit-btn { background: var(--green-light); border: 1px solid #a7e3cb; color: var(--green-dark); border-radius: 7px; padding: 5px 12px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .inline-input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+    padding: 5px 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; width: 100%;
+    outline: none; transition: border-color 0.2s;
+  }
+  .inline-input:focus { border-color: var(--green); }
+  .save-btn { background: var(--green); border: none; border-radius: 7px; padding: 6px 16px; color: #fff; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .save-btn:hover { background: var(--green-dark); }
+  .cancel-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 6px 12px; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: #fff; border-radius: 14px; border: 1px solid var(--border); padding: 20px; }
+  .stat-card-val { font-family: 'Syne', sans-serif; font-size: 32px; font-weight: 800; color: var(--green-dark); }
+  .stat-card-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .toast {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(100px);
+    background: #0d1e13; color: #fff; padding: 12px 24px; border-radius: 12px;
+    font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
+    transition: transform 0.35s; z-index: 9999; pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* MODAL */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; display: none; align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: #fff; border-radius: 18px; padding: 28px; width: 440px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; margin-bottom: 20px; }
+  .modal-fields { display: flex; flex-direction: column; gap: 14px; }
+  .modal-field label { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .modal-field input, .modal-field select, .modal-field textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none;
+    transition: border-color 0.2s; color: var(--text);
+  }
+  .modal-field input:focus, .modal-field select:focus, .modal-field textarea:focus { border-color: var(--green); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-save { flex: 1; background: var(--green); border: none; border-radius: 10px; padding: 12px; color: #fff; font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .modal-cancel { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+
+  @media (max-width: 768px) {
+    .sidebar { width: 100%; position: absolute; z-index: 10; bottom: 0; height: 45vh; border-right: none; border-top: 2px solid var(--border); }
+    .map-area { height: 55vh; }
+    .detail-panel { width: 100%; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .header-filters { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     AUTH OVERLAY
+══════════════════════════════════════════════ -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-box">
+    <div class="auth-logo">Charge<span>Path</span></div>
+    <div class="auth-sub">Find CNG & EV stations near you</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Sign In</button>
+      <button class="auth-tab" onclick="switchAuthTab('register')">Create Account</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="auth-form active" id="loginForm">
+      <div id="loginError" class="auth-error">Invalid email or password.</div>
+      <div class="auth-field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="you@email.com">
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="loginPass" placeholder="••••••••">
+      </div>
+      <button class="auth-btn" onclick="doLogin()">Sign In</button>
+    </div>
+
+    <!-- REGISTER -->
+    <div class="auth-form" id="registerForm">
+      <div id="regError" class="auth-error"></div>
+      <div class="auth-row">
+        <div class="auth-field">
+          <label>First Name</label>
+          <input type="text" id="regFirst" placeholder="Arjun">
+        </div>
+        <div class="auth-field">
+          <label>Last Name</label>
+          <input type="text" id="regLast" placeholder="Kumar">
+        </div>
+      </div>
+      <div class="auth-field">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="you@email.com">
+      </div>
+      <div class="auth-field">
+        <label>Phone Number</label>
+        <input type="tel" id="regPhone" placeholder="+91 98765 43210">
+      </div>
+      <div class="auth-field">
+        <label>Vehicle Type</label>
+        <select id="regVehicle">
+          <option value="">Select vehicle type</option>
+          <option>Electric Car (4W)</option>
+          <option>Electric Bike / Scooter</option>
+          <option>CNG Car</option>
+          <option>CNG Auto</option>
+          <option>CNG Bus</option>
+          <option>Hybrid Vehicle</option>
+        </select>
+      </div>
+      <div class="auth-row">
+        <div class="auth-field">
+          <label>City</label>
+          <input type="text" id="regCity" placeholder="Chennai">
+        </div>
+        <div class="auth-field">
+          <label>State</label>
+          <input type="text" id="regState" placeholder="Tamil Nadu">
+        </div>
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="regPass" placeholder="Min 6 characters">
+      </div>
+      <button class="auth-btn" onclick="doRegister()">Create Account</button>
+    </div>
+
+    <div class="auth-admin-link">
+      <a href="#" onclick="showAdminAuth()">Administrator Login →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     ADMIN AUTH OVERLAY
+══════════════════════════════════════════════ -->
+<div class="admin-overlay hidden" id="adminAuthOverlay">
+  <div class="auth-box">
+    <div class="auth-logo">Charge<span>Path</span></div>
+    <div class="auth-sub" style="color:#f59e0b;">Administrator Access</div>
+    <div id="adminError" class="auth-error" style="margin-bottom:14px;"></div>
+    <div class="auth-form active" style="display:flex;flex-direction:column;gap:14px;">
+      <div class="auth-field">
+        <label>Admin Username</label>
+        <input type="text" id="adminUser" placeholder="admin">
+      </div>
+      <div class="auth-field">
+        <label>Admin Password</label>
+        <input type="password" id="adminPass" placeholder="••••••••">
+      </div>
+      <button class="auth-btn" style="background:#e08c00;" onclick="doAdminLogin()">Admin Sign In</button>
+    </div>
+    <div class="auth-admin-link" style="margin-top:16px;">
+      <a href="#" onclick="showUserAuth()">← Back to User Login</a>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════════ -->
+<div class="app" id="mainApp">
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">Charge<span>Path</span></div>
+    <div class="header-search">
+      <svg width="15" height="15" fill="none" stroke="#6b7c74" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="Search stations, areas…" oninput="filterStations(this.value)" id="searchInput">
+    </div>
+    <div class="header-filters">
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn cng" onclick="setFilter('cng',this)">⛽ CNG</button>
+      <button class="filter-btn ev" onclick="setFilter('ev',this)">⚡ EV</button>
+    </div>
+    <div class="header-right">
+      <div class="user-badge">
+        <div class="user-avatar" id="userAvatar">A</div>
+        <div class="user-name" id="userName">User</div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="body">
+    <!-- Station List -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">Nearby Stations</div>
+        <div class="sidebar-count" id="stationCount">0 stations found</div>
+      </div>
+      <div class="station-list" id="stationList"></div>
+    </div>
+
+    <!-- Map Area -->
+    <div class="map-area">
+      <iframe id="map-iframe"
+        src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d62169.22297524636!2d80.2707!3d13.0827!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2sin!4v1700000000000!5m2!1sen!2sin"
+        allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade">
+      </iframe>
+
+      <!-- Detail Panel -->
+      <div class="detail-panel" id="detailPanel">
+        <div class="dp-close">
+          <button onclick="closeDetail()">← Back</button>
+          <span id="dp-close-name" style="font-weight:600;font-size:14px;"></span>
+        </div>
+        <div id="detailContent"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     ADMIN DASHBOARD
+══════════════════════════════════════════════ -->
+<div class="admin-app" id="adminApp">
+  <div class="admin-header">
+    <div class="admin-logo">Charge<span>Path</span></div>
+    <div class="admin-badge">Admin</div>
+    <div class="admin-nav">
+      <button class="admin-nav-btn active" onclick="adminTab('overview',this)">Overview</button>
+      <button class="admin-nav-btn" onclick="adminTab('stations',this)">Stations</button>
+      <button class="admin-nav-btn" onclick="adminTab('customers',this)">Customers</button>
+    </div>
+    <button class="admin-logout" onclick="adminLogout()">Sign Out</button>
+  </div>
+
+  <div class="admin-body">
+    <!-- Overview -->
+    <div class="admin-section active" id="sec-overview">
+      <div class="admin-section-title">Dashboard Overview</div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-card-val" id="st-total">12</div><div class="stat-card-label">Total Stations</div></div>
+        <div class="stat-card"><div class="stat-card-val" style="color:var(--amber);" id="st-cng">5</div><div class="stat-card-label">CNG Stations</div></div>
+        <div class="stat-card"><div class="stat-card-val" style="color:var(--blue);" id="st-ev">7</div><div class="stat-card-label">EV Stations</div></div>
+        <div class="stat-card"><div class="stat-card-val" id="st-cust">0</div><div class="stat-card-label">Registered Users</div></div>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Station</th><th>Type</th><th>Traffic</th><th>Status</th></tr></thead>
+          <tbody id="overviewTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Stations -->
+    <div class="admin-section" id="sec-stations">
+      <div class="admin-section-title">Manage Stations</div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Name</th><th>Phone</th><th>CNG Price</th><th>EV Rate</th><th>Ports</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="adminStationBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Customers -->
+    <div class="admin-section" id="sec-customers">
+      <div class="admin-section-title">Customer Management</div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>City</th><th>Joined</th></tr></thead>
+          <tbody id="adminCustomerBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Station Modal -->
+<div class="modal-backdrop" id="editModal">
+  <div class="modal">
+    <div class="modal-title">Edit Station Info</div>
+    <div class="modal-fields" id="editFields"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-save" onclick="saveStationEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════
+//  DATA
+// ════════════════════════════════════════
+const STATIONS = [
+  {
+    id: 1, name: "GreenFuel CNG Hub", type: "cng",
+    address: "Plot 14, Anna Salai, Chennai – 600002",
+    lat: 13.0562, lng: 80.2501,
+    phone: "+91 44 2345 6789",
+    open: true, traffic: "low",
+    cngPrice: "₹89/kg", evRate: null,
+    ports: [],
+    amenities: ["Waiting Area", "Restrooms", "Convenience Store"],
+    operatingHours: "6:00 AM – 10:00 PM",
+    rating: 4.3,
+    slots: 8, slotsAvail: 5,
+    notes: "Only authorised IOCL CNG dispenser."
+  },
+  {
+    id: 2, name: "Volta EV Supercharge", type: "ev",
+    address: "Phoenix MarketCity, Velachery, Chennai – 600042",
+    lat: 13.0023, lng: 80.2209,
+    phone: "+91 98400 12345",
+    open: true, traffic: "medium",
+    cngPrice: null, evRate: "₹18/kWh",
+    ports: [
+      { name: "CCS2 (DC Fast)", available: 4 },
+      { name: "Type 2 AC (22kW)", available: 6 },
+      { name: "CHAdeMO", available: 2 }
+    ],
+    amenities: ["Food Court", "Wi-Fi", "Shopping"],
+    operatingHours: "24 Hours",
+    rating: 4.7,
+    slots: 12, slotsAvail: 4,
+    notes: "Located on basement Level B2."
+  },
+  {
+    id: 3, name: "HP CNG Station – T.Nagar", type: "cng",
+    address: "No. 7, Usman Road, T.Nagar, Chennai – 600017",
+    lat: 13.0397, lng: 80.2337,
+    phone: "+91 44 2815 9900",
+    open: true, traffic: "high",
+    cngPrice: "₹86/kg", evRate: null,
+    ports: [],
+    amenities: ["Parking", "ATM"],
+    operatingHours: "5:30 AM – 11:00 PM",
+    rating: 3.9,
+    slots: 6, slotsAvail: 1,
+    notes: "Peak hours: 7–9 AM & 5–8 PM. Expect queues."
+  },
+  {
+    id: 4, name: "Tata Power EV – Adyar", type: "ev",
+    address: "Gandhi Nagar 2nd Main Rd, Adyar, Chennai – 600020",
+    lat: 13.0067, lng: 80.2525,
+    phone: "+91 80001 00001",
+    open: true, traffic: "low",
+    cngPrice: null, evRate: "₹15/kWh",
+    ports: [
+      { name: "Type 2 AC (7.4kW)", available: 3 },
+      { name: "CCS2 (DC 30kW)", available: 2 }
+    ],
+    amenities: ["Parking", "Security"],
+    operatingHours: "6:00 AM – 11:00 PM",
+    rating: 4.5,
+    slots: 5, slotsAvail: 3,
+    notes: "App-based booking available via Tata Power EZ Charge."
+  },
+  {
+    id: 5, name: "IndianOil CNG – Perambur", type: "cng",
+    address: "NSC Bose Road, Perambur, Chennai – 600011",
+    lat: 13.1177, lng: 80.2366,
+    phone: "+91 44 2661 4500",
+    open: false, traffic: "low",
+    cngPrice: "₹88/kg", evRate: null,
+    ports: [],
+    amenities: ["Restrooms"],
+    operatingHours: "Closed for Maintenance",
+    rating: 3.5,
+    slots: 4, slotsAvail: 0,
+    notes: "Currently closed for annual maintenance. Reopening 10th Feb."
+  },
+  {
+    id: 6, name: "ChargeZone Hub – OMR", type: "ev",
+    address: "Thoraipakkam, Old Mahabalipuram Road, Chennai – 600097",
+    lat: 12.9318, lng: 80.2305,
+    phone: "+91 73041 00100",
+    open: true, traffic: "medium",
+    cngPrice: null, evRate: "₹16/kWh",
+    ports: [
+      { name: "CCS2 (DC 60kW)", available: 3 },
+      { name: "Type 2 AC (22kW)", available: 4 },
+      { name: "GB/T (DC)", available: 1 }
+    ],
+    amenities: ["Food Stalls", "Wi-Fi", "Washrooms"],
+    operatingHours: "24 Hours",
+    rating: 4.6,
+    slots: 8, slotsAvail: 4,
+    notes: "Popular tech-corridor hub. Pay via ChargeZone app."
+  },
+  {
+    id: 7, name: "Mahanagar Gas CNG – Egmore", type: "cng",
+    address: "Whannels Road, Egmore, Chennai – 600008",
+    lat: 13.0783, lng: 80.2616,
+    phone: "+91 44 2819 2200",
+    open: true, traffic: "low",
+    cngPrice: "₹91/kg", evRate: null,
+    ports: [],
+    amenities: ["Tyre Inflation", "Car Wash"],
+    operatingHours: "6:00 AM – 9:00 PM",
+    rating: 4.1,
+    slots: 5, slotsAvail: 4,
+    notes: "Adjacent to Egmore railway station."
+  },
+  {
+    id: 8, name: "Zeon EV Charge – Porur", type: "ev",
+    address: "NH-32, Porur, Chennai – 600116",
+    lat: 13.0358, lng: 80.1567,
+    phone: "+91 94440 23300",
+    open: true, traffic: "high",
+    cngPrice: null, evRate: "₹14/kWh",
+    ports: [
+      { name: "Type 1 AC (3.3kW)", available: 4 },
+      { name: "Type 2 AC (7.4kW)", available: 5 },
+      { name: "CCS2 (DC 50kW)", available: 2 }
+    ],
+    amenities: ["Highway Café", "Parking", "Restrooms"],
+    operatingHours: "24 Hours",
+    rating: 4.4,
+    slots: 11, slotsAvail: 3,
+    notes: "Best rates for highway charging on the Bangalore corridor."
+  },
+  {
+    id: 9, name: "CNG Express – Ambattur", type: "cng",
+    address: "Ambattur Industrial Estate, Chennai – 600058",
+    lat: 13.1143, lng: 80.1548,
+    phone: "+91 44 2635 8800",
+    open: true, traffic: "medium",
+    cngPrice: "₹87/kg", evRate: null,
+    ports: [],
+    amenities: ["Convenience Store"],
+    operatingHours: "5:00 AM – 10:00 PM",
+    rating: 4.0,
+    slots: 7, slotsAvail: 3,
+    notes: "Serves industrial fleet vehicles primarily."
+  },
+  {
+    id: 10, name: "Ather Grid – Nungambakkam", type: "ev",
+    address: "Khader Nawaz Khan Road, Nungambakkam, Chennai – 600006",
+    lat: 13.0573, lng: 80.2491,
+    phone: "+91 80081 12345",
+    open: true, traffic: "low",
+    cngPrice: null, evRate: "₹2/min (fast) / ₹1/min (slow)",
+    ports: [
+      { name: "Ather 450X Fast Charge", available: 5 },
+      { name: "Universal 2-Wheeler Port", available: 8 }
+    ],
+    amenities: ["Café", "Bike Parking"],
+    operatingHours: "7:00 AM – 10:00 PM",
+    rating: 4.8,
+    slots: 13, slotsAvail: 9,
+    notes: "Primarily for 2-wheelers. Ather owners get discounts."
+  },
+  {
+    id: 11, name: "BPCL CNG & EV Combo", type: "both",
+    address: "Poonamallee High Road, Maduravoyal, Chennai – 600095",
+    lat: 13.0701, lng: 80.1388,
+    phone: "+91 44 2377 5500",
+    open: true, traffic: "medium",
+    cngPrice: "₹88/kg", evRate: "₹17/kWh",
+    ports: [
+      { name: "Type 2 AC (22kW)", available: 2 },
+      { name: "CCS2 (DC 30kW)", available: 1 }
+    ],
+    amenities: ["Full Service", "Café", "ATM", "Restrooms"],
+    operatingHours: "5:00 AM – 11:00 PM",
+    rating: 4.2,
+    slots: 9, slotsAvail: 5,
+    notes: "One of few combo stations offering both CNG and EV. "
+  },
+  {
+    id: 12, name: "Sun Mobility Swap – Guindy", type: "ev",
+    address: "Industrial Estate, Guindy, Chennai – 600032",
+    lat: 13.0060, lng: 80.2134,
+    phone: "+91 95001 88888",
+    open: true, traffic: "low",
+    cngPrice: null, evRate: "₹49/swap",
+    ports: [
+      { name: "Battery Swap Station", available: 20 }
+    ],
+    amenities: ["Waiting Lounge", "Security Camera"],
+    operatingHours: "24 Hours",
+    rating: 4.5,
+    slots: 20, slotsAvail: 14,
+    notes: "Battery swap completed in under 3 minutes for Sun Mobility partners."
+  }
+];
+
+let users = [];
+let currentUser = null;
+let activeFilter = 'all';
+let editingStation = null;
+
+// ════════════════════════════════════════
+//  AUTH
+// ════════════════════════════════════════
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+  const idx = tab === 'login' ? 0 : 1;
+  document.querySelectorAll('.auth-tab')[idx].classList.add('active');
+  document.getElementById(tab === 'login' ? 'loginForm' : 'registerForm').classList.add('active');
+}
+
+function showAdminAuth() {
+  document.getElementById('authOverlay').classList.add('hidden');
+  document.getElementById('adminAuthOverlay').classList.remove('hidden');
+}
+function showUserAuth() {
+  document.getElementById('adminAuthOverlay').classList.add('hidden');
+  document.getElementById('authOverlay').classList.remove('hidden');
+}
+
+function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginError');
+  const user = users.find(u => u.email === email && u.password === pass);
+  if (!user) { err.style.display = 'block'; return; }
+  err.style.display = 'none';
+  loginUser(user);
+}
+
+function doRegister() {
+  const first = document.getElementById('regFirst').value.trim();
+  const last = document.getElementById('regLast').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const phone = document.getElementById('regPhone').value.trim();
+  const vehicle = document.getElementById('regVehicle').value;
+  const city = document.getElementById('regCity').value.trim();
+  const state = document.getElementById('regState').value.trim();
+  const pass = document.getElementById('regPass').value;
+  const err = document.getElementById('regError');
+  if (!first || !last || !email || !phone || !vehicle || !pass) {
+    err.style.display = 'block'; err.textContent = 'Please fill all required fields.'; return;
+  }
+  if (pass.length < 6) { err.style.display = 'block'; err.textContent = 'Password must be at least 6 characters.'; return; }
+  if (users.find(u => u.email === email)) { err.style.display = 'block'; err.textContent = 'Email already registered.'; return; }
+  err.style.display = 'none';
+  const newUser = { first, last, email, phone, vehicle, city, state, password: pass, joined: new Date().toLocaleDateString('en-IN') };
+  users.push(newUser);
+  loginUser(newUser);
+}
+
+function loginUser(user) {
+  currentUser = user;
+  document.getElementById('authOverlay').classList.add('hidden');
+  document.getElementById('mainApp').classList.add('visible');
+  document.getElementById('userName').textContent = user.first + ' ' + user.last;
+  document.getElementById('userAvatar').textContent = (user.first[0] + user.last[0]).toUpperCase();
+  renderStations();
+}
+
+function doLogout() {
+  currentUser = null;
+  document.getElementById('mainApp').classList.remove('visible');
+  document.getElementById('authOverlay').classList.remove('hidden');
+}
+
+// ADMIN
+function doAdminLogin() {
+  const user = document.getElementById('adminUser').value.trim();
+  const pass = document.getElementById('adminPass').value;
+  const err = document.getElementById('adminError');
+  if (user === 'admin' && pass === 'admin123') {
+    err.style.display = 'none';
+    document.getElementById('adminAuthOverlay').classList.add('hidden');
+    document.getElementById('adminApp').classList.add('visible');
+    renderAdminDashboard();
+  } else {
+    err.style.display = 'block'; err.textContent = 'Invalid admin credentials. (admin / admin123)';
+  }
+}
+
+function adminLogout() {
+  document.getElementById('adminApp').classList.remove('visible');
+  document.getElementById('authOverlay').classList.remove('hidden');
+}
+
+// ════════════════════════════════════════
+//  STATION LIST
+// ════════════════════════════════════════
+let filteredStations = [...STATIONS];
+
+function filterStations(query) {
+  const q = query.toLowerCase();
+  filteredStations = STATIONS.filter(s => {
+    const matchType = activeFilter === 'all' || s.type === activeFilter || (activeFilter !== 'all' && s.type === 'both');
+    const matchQ = !q || s.name.toLowerCase().includes(q) || s.address.toLowerCase().includes(q);
+    return matchType && matchQ;
+  });
+  renderStations();
+}
+
+function setFilter(type, btn) {
+  activeFilter = type;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filterStations(document.getElementById('searchInput').value);
+}
+
+function renderStations() {
+  const list = document.getElementById('stationList');
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  filteredStations = STATIONS.filter(s => {
+    const matchType = activeFilter === 'all' || s.type === activeFilter || s.type === 'both';
+    const matchQ = !q || s.name.toLowerCase().includes(q) || s.address.toLowerCase().includes(q);
+    return matchType && matchQ;
+  });
+  document.getElementById('stationCount').textContent = filteredStations.length + ' stations found';
+  list.innerHTML = filteredStations.map(s => `
+    <div class="station-card" id="card-${s.id}" onclick="openDetail(${s.id})">
+      <div class="sc-top">
+        <div>
+          <div class="sc-name">${s.name}</div>
+          <div class="sc-badges">
+            ${s.type === 'cng' || s.type === 'both' ? '<span class="badge badge-cng">CNG</span>' : ''}
+            ${s.type === 'ev' || s.type === 'both' ? '<span class="badge badge-ev">EV</span>' : ''}
+            <span class="badge ${s.open ? 'badge-open' : 'badge-closed'}">${s.open ? 'Open' : 'Closed'}</span>
+          </div>
+        </div>
+      </div>
+      <div class="sc-meta">
+        <span class="traffic-dot traffic-${s.traffic}"></span>
+        <span>${s.traffic.charAt(0).toUpperCase() + s.traffic.slice(1)} traffic</span>
+        <span>·</span>
+        <span>${s.slotsAvail}/${s.slots} slots</span>
+      </div>
+      <div class="sc-price">
+        ${s.cngPrice ? '⛽ ' + s.cngPrice : ''}
+        ${s.cngPrice && s.evRate ? ' &nbsp;·&nbsp; ' : ''}
+        ${s.evRate ? '⚡ ' + s.evRate : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════
+//  DETAIL PANEL
+// ════════════════════════════════════════
+function openDetail(id) {
+  const s = STATIONS.find(st => st.id === id);
+  document.querySelectorAll('.station-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById('card-' + id);
+  if (card) card.classList.add('selected');
+  document.getElementById('dp-close-name').textContent = s.name;
+
+  const trafficColor = { low: '#22c55e', medium: '#f59e0b', high: '#ef4444' };
+  const trafficPct = { low: '25%', medium: '65%', high: '90%' };
+  const trafficLabel = { low: 'Low', medium: 'Moderate', high: 'Heavy' };
+
+  const portsHtml = s.ports.length ? s.ports.map(p => `
+    <div class="dp-port">
+      <div>
+        <div class="dp-port-name">${p.name}</div>
+        <div class="dp-port-avail">${p.available} port${p.available !== 1 ? 's' : ''} available</div>
+      </div>
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#1a9e6e" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    </div>
+  `).join('') : '<div style="color:var(--muted);font-size:13px;padding:10px 0;">CNG — no EV ports at this station.</div>';
+
+  const amenitiesHtml = s.amenities.map(a => `<span style="background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:4px 10px;font-size:12px;color:var(--muted);">${a}</span>`).join('');
+
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name + ' ' + s.address)}`;
+
+  document.getElementById('detailContent').innerHTML = `
+    <div class="dp-hero">
+      <div class="dp-type-badge">
+        ${s.type === 'cng' || s.type === 'both' ? '<span class="badge badge-cng">CNG</span>' : ''}
+        ${s.type === 'ev' || s.type === 'both' ? '<span class="badge badge-ev">EV</span>' : ''}
+        <span class="badge ${s.open ? 'badge-open' : 'badge-closed'}">${s.open ? 'Open Now' : 'Closed'}</span>
+      </div>
+      <div class="dp-name">${s.name}</div>
+      <div class="dp-address">📍 ${s.address}</div>
+      <div style="margin-top:6px;font-size:13px;color:var(--muted);">🕐 ${s.operatingHours} &nbsp;·&nbsp; ⭐ ${s.rating}</div>
+    </div>
+
+    <hr class="divider">
+    <div class="dp-section">
+      <div class="dp-section-title">Pricing</div>
+      <div class="dp-grid">
+        ${s.cngPrice ? `<div class="dp-stat"><div class="dp-stat-label">CNG (per kg)</div><div class="dp-stat-val amber">${s.cngPrice}</div></div>` : ''}
+        ${s.evRate ? `<div class="dp-stat"><div class="dp-stat-label">EV Charging</div><div class="dp-stat-val blue">${s.evRate}</div></div>` : ''}
+        <div class="dp-stat"><div class="dp-stat-label">Slots Available</div><div class="dp-stat-val green">${s.slotsAvail}/${s.slots}</div></div>
+        <div class="dp-stat"><div class="dp-stat-label">Rating</div><div class="dp-stat-val">⭐ ${s.rating}</div></div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <div class="dp-section">
+      <div class="dp-section-title">Live Traffic</div>
+      <div class="dp-traffic">
+        <span style="font-size:13px;color:var(--muted);min-width:60px;">Right now</span>
+        <div class="dp-traffic-bar">
+          <div class="dp-traffic-fill" style="width:${trafficPct[s.traffic]};background:${trafficColor[s.traffic]};"></div>
+        </div>
+        <span class="dp-traffic-label" style="color:${trafficColor[s.traffic]};">${trafficLabel[s.traffic]}</span>
+      </div>
+    </div>
+
+    ${s.ports.length ? `
+    <hr class="divider">
+    <div class="dp-section">
+      <div class="dp-section-title">EV Port Types</div>
+      <div class="dp-ports">${portsHtml}</div>
+    </div>` : ''}
+
+    <hr class="divider">
+    <div class="dp-section">
+      <div class="dp-section-title">Amenities</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">${amenitiesHtml}</div>
+    </div>
+
+    ${s.notes ? `
+    <hr class="divider">
+    <div class="dp-section">
+      <div class="dp-section-title">Station Notes</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;background:var(--bg);border-radius:10px;padding:12px;">${s.notes}</div>
+    </div>` : ''}
+
+    <hr class="divider">
+    <div class="dp-actions">
+      <button class="action-btn call" onclick="callStation('${s.phone}','${s.name}')">📞 Call Station — ${s.phone}</button>
+      <button class="action-btn directions" onclick="openMaps('${mapsUrl}')">🗺️ Get Directions in Google Maps</button>
+    </div>
+  `;
+
+  // update map iframe
+  const iframe = document.getElementById('map-iframe');
+  iframe.src = `https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU3h_Y&q=${encodeURIComponent(s.name + ' ' + s.address)}&zoom=15`;
+
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  document.querySelectorAll('.station-card').forEach(c => c.classList.remove('selected'));
+}
+
+function callStation(phone, name) {
+  showToast('📞 Calling ' + name + ' at ' + phone);
+  window.location.href = 'tel:' + phone.replace(/\s/g, '');
+}
+
+function openMaps(url) {
+  window.open(url, '_blank');
+}
+
+// ════════════════════════════════════════
+//  ADMIN DASHBOARD
+// ════════════════════════════════════════
+function adminTab(section, btn) {
+  document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('sec-' + section).classList.add('active');
+}
+
+function renderAdminDashboard() {
+  const cng = STATIONS.filter(s => s.type === 'cng').length;
+  const ev = STATIONS.filter(s => s.type === 'ev' || s.type === 'both').length;
+  document.getElementById('st-total').textContent = STATIONS.length;
+  document.getElementById('st-cng').textContent = cng;
+  document.getElementById('st-ev').textContent = ev;
+  document.getElementById('st-cust').textContent = users.length;
+
+  // Overview table
+  document.getElementById('overviewTableBody').innerHTML = STATIONS.map(s => `
+    <tr>
+      <td><strong>${s.name}</strong><br><span style="font-size:12px;color:var(--muted);">${s.address.split(',')[0]}</span></td>
+      <td>${s.type === 'both' ? 'CNG + EV' : s.type.toUpperCase()}</td>
+      <td><span style="color:${{ low:'#22c55e', medium:'#f59e0b', high:'#ef4444' }[s.traffic]};font-weight:600;">${s.traffic}</span></td>
+      <td><span class="badge ${s.open ? 'badge-open' : 'badge-closed'}">${s.open ? 'Open' : 'Closed'}</span></td>
+    </tr>
+  `).join('');
+
+  // Stations table
+  document.getElementById('adminStationBody').innerHTML = STATIONS.map(s => `
+    <tr id="arow-${s.id}">
+      <td><strong>${s.name}</strong></td>
+      <td>${s.phone}</td>
+      <td>${s.cngPrice || '—'}</td>
+      <td>${s.evRate || '—'}</td>
+      <td>${s.ports.length || '—'} port types</td>
+      <td><span class="badge ${s.open ? 'badge-open' : 'badge-closed'}">${s.open ? 'Open' : 'Closed'}</span></td>
+      <td><button class="edit-btn" onclick="openEditModal(${s.id})">Edit</button></td>
+    </tr>
+  `).join('');
+
+  // Customers table
+  renderCustomers();
+}
+
+function renderCustomers() {
+  const body = document.getElementById('adminCustomerBody');
+  if (users.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px;">No registered users yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = users.map(u => `
+    <tr>
+      <td><strong>${u.first} ${u.last}</strong></td>
+      <td>${u.email}</td>
+      <td>${u.phone}</td>
+      <td>${u.vehicle}</td>
+      <td>${u.city}, ${u.state}</td>
+      <td>${u.joined}</td>
+    </tr>
+  `).join('');
+  document.getElementById('st-cust').textContent = users.length;
+}
+
+function openEditModal(id) {
+  editingStation = STATIONS.find(s => s.id === id);
+  const s = editingStation;
+  document.getElementById('editFields').innerHTML = `
+    <div class="modal-field"><label>Station Name</label><input id="ef-name" value="${s.name}"></div>
+    <div class="modal-field"><label>Phone Number</label><input id="ef-phone" value="${s.phone}"></div>
+    <div class="modal-field"><label>Address</label><input id="ef-address" value="${s.address}"></div>
+    <div class="modal-field"><label>CNG Price (leave blank if no CNG)</label><input id="ef-cng" value="${s.cngPrice || ''}"></div>
+    <div class="modal-field"><label>EV Rate (leave blank if no EV)</label><input id="ef-ev" value="${s.evRate || ''}"></div>
+    <div class="modal-field"><label>Operating Hours</label><input id="ef-hours" value="${s.operatingHours}"></div>
+    <div class="modal-field">
+      <label>Status</label>
+      <select id="ef-status">
+        <option value="true" ${s.open ? 'selected' : ''}>Open</option>
+        <option value="false" ${!s.open ? 'selected' : ''}>Closed</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Traffic Level</label>
+      <select id="ef-traffic">
+        <option value="low" ${s.traffic === 'low' ? 'selected' : ''}>Low</option>
+        <option value="medium" ${s.traffic === 'medium' ? 'selected' : ''}>Medium</option>
+        <option value="high" ${s.traffic === 'high' ? 'selected' : ''}>High</option>
+      </select>
+    </div>
+    <div class="modal-field"><label>Ports (one per line: PortName | Count)</label>
+      <textarea id="ef-ports" rows="4">${s.ports.map(p => p.name + ' | ' + p.available).join('\n')}</textarea>
+    </div>
+    <div class="modal-field"><label>Station Notes</label><textarea id="ef-notes" rows="3">${s.notes}</textarea></div>
+  `;
+  document.getElementById('editModal').classList.add('open');
+}
+
+function saveStationEdit() {
+  if (!editingStation) return;
+  const s = editingStation;
+  const idx = STATIONS.findIndex(st => st.id === s.id);
+
+  STATIONS[idx].name = document.getElementById('ef-name').value.trim();
+  STATIONS[idx].phone = document.getElementById('ef-phone').value.trim();
+  STATIONS[idx].address = document.getElementById('ef-address').value.trim();
+  STATIONS[idx].cngPrice = document.getElementById('ef-cng').value.trim() || null;
+  STATIONS[idx].evRate = document.getElementById('ef-ev').value.trim() || null;
+  STATIONS[idx].operatingHours = document.getElementById('ef-hours').value.trim();
+  STATIONS[idx].open = document.getElementById('ef-status').value === 'true';
+  STATIONS[idx].traffic = document.getElementById('ef-traffic').value;
+  STATIONS[idx].notes = document.getElementById('ef-notes').value.trim();
+
+  const portsRaw = document.getElementById('ef-ports').value.trim();
+  if (portsRaw) {
+    STATIONS[idx].ports = portsRaw.split('\n').map(line => {
+      const parts = line.split('|');
+      return { name: (parts[0] || '').trim(), available: parseInt((parts[1] || '0').trim()) || 0 };
+    }).filter(p => p.name);
+  }
+
+  closeModal();
+  renderAdminDashboard();
+  showToast('✅ Station "' + STATIONS[idx].name + '" updated successfully!');
+  // Also refresh user-facing list if app is showing
+  if (document.getElementById('mainApp').classList.contains('visible')) renderStations();
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('open');
+  editingStation = null;
+}
+
+// ════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// Close modal on backdrop click
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// Init
+renderStations();
+</script>
+</body>
+</html>
